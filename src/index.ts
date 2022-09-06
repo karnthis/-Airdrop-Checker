@@ -1,6 +1,8 @@
 import express from 'express'
 import mysql from 'mysql'
+import * as dotenv from 'dotenv'
 
+dotenv.config()
 const app = express()
 
 const {
