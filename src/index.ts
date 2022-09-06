@@ -1,9 +1,12 @@
 import express from 'express'
 import mysql from 'mysql'
+import * as bodyParser from 'body-parser'
 import * as dotenv from 'dotenv'
 
 dotenv.config()
 const app = express()
+
+app.use(bodyParser.urlencoded())
 
 const {
     PORT,
@@ -21,7 +24,7 @@ const mysqlConfig = {
     database: DATABASE
 };
 
-app.get('/:wallet', function (req, res) {
+app.get('/', function (req, res) {
     mysql.connect(mysqlConfig, function (err) {
         if (err) {
             console.log(err)
@@ -29,7 +32,12 @@ app.get('/:wallet', function (req, res) {
         } else {
             const mysqlRequest = new mysql.Request()
 
-            mysqlRequest.query(`select * from example where wallet = '${req.params.wallet}'`,
+            mysqlRequest.query(
+              `select * 
+                from example 
+                where Secret_address = '${req.body.Secret_address}'
+                or Juno_address = '${req.body.Juno_address}'
+                or Atom_address = '${req.body.Atom_address}'`,
               function (err, records) {
                   if (err) {
                       console.log(err)
