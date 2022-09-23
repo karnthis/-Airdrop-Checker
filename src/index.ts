@@ -1,52 +1,45 @@
 import express from 'express'
-import mysql from 'mysql'
+import { Pool } from 'pg'
 import * as bodyParser from 'body-parser'
 import * as dotenv from 'dotenv'
 
 dotenv.config()
 const app = express()
+const pgPool = new Pool()
 
 app.use(bodyParser.urlencoded())
 
-const {
-    PORT,
-    USER,
-    PASSWORD,
-    SERVER,
-    DATABASE
-} = process.env
+const { PORT } = process.env
 const usedPort = Number(PORT) || 3000
 
-const mysqlConfig = {
-    user: USER,
-    password: PASSWORD,
-    server: SERVER,
-    database: DATABASE
-};
-
 app.get('/', function (req, res) {
-    mysql.connect(mysqlConfig, function (err) {
-        if (err) {
-            console.log(err)
-            res.error(err)
-        } else {
-            const mysqlRequest = new mysql.Request()
-
-            mysqlRequest.query(
-              `select * 
-                from example 
-                where Secret_address = '${req.body.Secret_address}'
-                or Juno_address = '${req.body.Juno_address}'
-                or Atom_address = '${req.body.Atom_address}'`,
-              function (err, records) {
-                  if (err) {
-                      console.log(err)
-                      res.error(err)
-                  } else {
-                      res.send(records)
-                  }
-              })
-        }
+  const rewardsQuery = `
+    SELECT * FROM Atom_Airdrop WHERE cosmosID = '$1'
+    UNION
+    SELECT * FROM Juno_Airdrop WHERE junoID = '$2'
+    UNION
+    SELECT * FROM Secret_Airdrop WHERE secretID = '$3'
+  `
+  const alphaQuery = `
+    SELECT * FROM Testnet_Airdrop WHERE secretID = '$1'
+  `
+  const betaQuery = `
+    SELECT * FROM Beta_Airdrop WHERE cosmosID = '$1'
+  `
+  pgPool
+    .connect()
+    .then(client => {
+      return client
+        .query(rewardsQuery, [])
+        .then(records => {
+          client.release()
+          res.send(records)
+        })
+        .catch(err => {
+          client.release()
+          console.log(err)
+          res.error(err)
+        })
     })
 })
 

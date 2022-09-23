@@ -1,0 +1,97 @@
+version: "3"
+
+volumes:
+  dbdata:
+  lecerts:
+
+services:
+  traefik-light:
+    image: traefik:v2.6 # The official v2 Traefik docker image
+    container_name: traefik-light
+    restart: unless-stopped
+    volumes:
+      - "lecerts:/letsencrypt"
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.network=prime"
+      - "--providers.docker.network=db"
+      - "--providers.docker.network=proxy"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.endpoint=tcp://socket-proxy:2375"
+      - "--entrypoints.web.address=:80"
+      # - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      # - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # - "--entrypoints.websecure.address=:443"
+      # - "--entrypoints.websecure.http.tls.certResolver=le-resolver"
+      # - "--entrypoints.websecure.http.tls.domains[0].main=api.ad.jackaldao.com"
+      # - "--certificatesResolvers.le-resolver.acme.httpChallenge.entryPoint=web"
+      # - "--certificatesresolvers.le-resolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=prime"
+      - "traefik.docker.network=proxy"
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: socket-proxy
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: 1
+    labels:
+      - "traefik.docker.network=proxy"
+      - "traefik.tcp.services.docker-proxy.loadbalancer.server.port=2375"
+
+  node-prime:
+    image: node:latest
+    container_name: "node-prime"
+    working_dir: "/node/app"
+    container_name: node-prime
+    depends_on:
+      - traefik-light
+    restart: unless-stopped
+    volumes:
+      - "./api:/node/app"
+    command: "npm run start"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=prime"
+      - "traefik.docker.network=db"
+      - "traefik.http.routers.node-prime.rule=Host(`localhost`)"
+      - "traefik.http.routers.node-prime.service=node-prime"
+      - "traefik.http.routers.node-prime.entrypoints=web"
+      # - "traefik.http.routers.node-prime.tls=true"
+      # - "traefik.http.routers.node-prime.tls.certresolver=le-resolver"
+      - "traefik.http.services.node-prime.loadbalancer.server.port=3000"
+
+  db-main:
+    # image: postgres:latest
+    build:
+      context: ..
+      dockerfile: db.Dockerfile
+    container_name: "db-main"
+    restart: unless-stopped
+    volumes:
+      - "dbdata:/var/lib/postgresql/data"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=db"
+      - "traefik.http.services.db-main.loadbalancer.server.port=5432"
+
+  adminer:
+    image: $IMAGE
+    depends_on:
+      - mariadb
+    environment:
+      ADMINER_DEFAULT_DB_DRIVER: pgsql
+      ADMINER_DEFAULT_DB_HOST: postgres
+      ADMINER_DEFAULT_DB_NAME: adminer
+    ports:
+      - 8080:9000
